@@ -86,20 +86,27 @@ def train_and_predict(raw_df: pd.DataFrame):
 def run_backtest(raw_df: pd.DataFrame, threshold: float = 0.5):
     X, y, data, feature_cols = get_features_and_target(raw_df)
     
+    # 1. 学習用(前半80%) と テスト用(後半20%) に分ける
+    # ※ AIの学習自体は、未来を見ないように「過去データのみ」で行います
     split_point = int(len(X) * 0.8)
-    X_train, X_test = X.iloc[:split_point], X.iloc[split_point:]
-    y_train, y_test = y.iloc[:split_point], y.iloc[split_point:]
+    X_train = X.iloc[:split_point]
+    y_train = y.iloc[:split_point]
     
-    returns_col = data["TOPIX(ETF)"].pct_change().shift(-1)
-    actual_returns = returns_col.loc[X_test.index]
-
-    # ランダムフォレスト
+    # モデル学習 (前半のデータだけで賢くなる)
     model = RandomForestClassifier(n_estimators=100, min_samples_split=5, random_state=42)
     model.fit(X_train, y_train)
     
-    probs = model.predict_proba(X_test)[:, 1]
+    # --- 【ここが変更点】 ---
+    # 2. 予測は「全期間 (X全体)」に対して行う
+    # これにより、グラフが「期間設定」と同じ長さになります
+    probs = model.predict_proba(X)[:, 1]
     predictions = (probs >= threshold).astype(int)
     
+    # リターン計算も全期間で行う
+    returns_col = data["TOPIX(ETF)"].pct_change().shift(-1)
+    actual_returns = returns_col.loc[X.index] # X_testではなくX全体
+    
+    # 資産推移シミュレーション
     strategy_assets = [1.0]
     market_assets = [1.0]
     current_strategy = 1.0

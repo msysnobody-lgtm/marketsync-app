@@ -78,7 +78,7 @@ try:
         fig.add_trace(go.Scatter(
             x=res_df.index, y=res_df["TOPIXガチホ"],
             mode='lines', name='TOPIXガチホ',
-            line=dict(color='gray', dash='dot')
+            line=dict(color='black', width=1)   # ← 黒の実線に変更
         ))
         
         # 2. AI戦略

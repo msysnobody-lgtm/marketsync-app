@@ -26,6 +26,18 @@ try:
     latest_date = raw_df.index[-1].strftime('%Y-%m-%d')
     st.info(f"データ取得日: {latest_date} (直近の終値データを使用)")
 
+    # === 【復活】元データのトレンド比較グラフ ===
+    st.subheader("📈 日米株価トレンド比較 (正規化済み)")
+    # データを正規化（最初の日を1.0として比較）
+    norm_df = raw_df / raw_df.iloc[0]
+    
+    fig_raw = go.Figure()
+    fig_raw.add_trace(go.Scatter(x=norm_df.index, y=norm_df["S&P500"], name="🇺🇸 S&P500", line=dict(color='blue')))
+    fig_raw.add_trace(go.Scatter(x=norm_df.index, y=norm_df["TOPIX(ETF)"], name="🇯🇵 TOPIX", line=dict(color='orange')))
+    fig_raw.update_layout(height=400, margin=dict(l=0, r=0, t=20, b=0))
+    st.plotly_chart(fig_raw, use_container_width=True)
+    # ==========================================
+
     # 2. AI予測
     col1, col2 = st.columns(2)
     
@@ -48,7 +60,6 @@ try:
     with col2:
         st.subheader("🔑 注目している指標")
         importance = ai_result["importance"]
-        # 重要度順にソート
         sorted_importance = sorted(importance.items(), key=lambda x: x[1], reverse=True)
         top_features = dict(sorted_importance[:3])
         st.json(top_features)
@@ -59,7 +70,6 @@ try:
     if run_simulation:
         st.subheader("💰 収益シミュレーション結果")
         with st.spinner(f'AI(強気度:{threshold})が過去データでトレード中...'):
-            # 【重要】ここで4つの値を受け取るように修正
             res_df, ret_ai, ret_market, test_start_date = run_backtest(raw_df, threshold)
             
         # 結果サマリー
@@ -74,14 +84,23 @@ try:
         st.subheader("📊 売買タイミング検証")
         fig = go.Figure()
         
-        # 1. 市場平均
+        # 背景（学習期間）を先に描画（最背面にするため）
+        min_date = res_df.index.min()
+        fig.add_vrect(
+            x0=min_date, x1=test_start_date,
+            fillcolor="gray", opacity=0.15,
+            layer="below", line_width=0,
+            annotation_text="学習期間 (Training)", annotation_position="top left"
+        )
+        
+        # 1. 市場平均 (黒線・太め)
         fig.add_trace(go.Scatter(
             x=res_df.index, y=res_df["TOPIXガチホ"],
             mode='lines', name='TOPIXガチホ',
-            line=dict(color='black', width=1)   # ← 黒の実線に変更
+            line=dict(color='black', width=2) # 黒くて太い線に変更
         ))
         
-        # 2. AI戦略
+        # 2. AI戦略 (赤線)
         fig.add_trace(go.Scatter(
             x=res_df.index, y=res_df["AI戦略"],
             mode='lines', name='AI戦略',
@@ -104,19 +123,9 @@ try:
             marker=dict(symbol='triangle-down', size=10, color='orange')
         ))
         
-        # --- 学習期間とテスト期間の境界線 ---
+        # テスト期間の境界線
         fig.add_vline(x=test_start_date, line_width=2, line_dash="dash", line_color="green")
         
-        # 学習期間をグレーアウト
-        min_date = res_df.index.min()
-        fig.add_vrect(
-            x0=min_date, x1=test_start_date,
-            fillcolor="gray", opacity=0.15,
-            layer="below", line_width=0,
-            annotation_text="学習期間 (Training)", annotation_position="top left"
-        )
-        
-        # テスト期間の注釈
         fig.add_annotation(
             x=test_start_date, y=1.0,
             text="ここから実力 (Testing) →",

@@ -1,99 +1,72 @@
-import sys
-from pathlib import Path
-
-# 1. 外部ライブラリのインポート
-import pandas as pd
-import plotly.express as px
-import plotly.graph_objects as go
 import streamlit as st
+import pandas as pd
+import plotly.graph_objects as go
+from services.data_service import load_market_data, process_lag_data
+from services.ai_service import train_and_predict, run_backtest
 
-# --- 2. パス解決 (Path Resolution) ---
-# appフォルダをモジュールとして認識させるための設定
-PROJECT_ROOT = Path(__file__).parent.parent
-sys.path.append(str(PROJECT_ROOT))
-
-# --- 3. 自作モジュールのインポート ---
-# 必ず sys.path.append の後に記述する
-from app.services.data_service import load_market_data, process_lag_data
-from app.services.ai_service import train_and_predict, run_backtest
-
-# --- UI設定 ---
+# --- ページ設定 ---
 st.set_page_config(page_title="MarketSync AI", layout="wide")
+
 st.title("🇺🇸S&P500 vs 🇯🇵TOPIX MarketSync AI")
+st.markdown("米国市場(S&P500)の動きから、翌日の日本市場(TOPIX)を予測するAI")
 
-# --- サイドバー (設定・操作) ---
+# --- サイドバー設定 ---
 st.sidebar.header("設定")
-period_option = st.sidebar.selectbox("期間を選択", ["1y", "2y", "5y", "10y"], index=1)
-lag_days = st.sidebar.slider("S&P500のタイムラグ (日)", 0, 5, 1)
+selected_period = st.sidebar.selectbox("データ期間", ["1y", "2y", "5y", "10y"], index=2)
+threshold = st.sidebar.slider("AIの強気度判定(しきい値)", 0.4, 0.6, 0.5, 0.01)
+run_simulation = st.sidebar.checkbox("収益シミュレーションを実行", value=True)
 
-st.sidebar.markdown("---")
-st.sidebar.subheader("🤖 AI予測")
-run_prediction = st.sidebar.button("明日のTOPIXを予測する")
-
-st.sidebar.markdown("---")
-st.sidebar.subheader("💰 バックテスト")
-
-# 【新機能】AIの性格調整スライダー
-threshold = st.sidebar.slider(
-    "AIの強気度 (買い基準)", 
-    min_value=0.3, max_value=0.7, value=0.5, step=0.05,
-    help="数値を下げると(0.4など)、自信がなくても積極的に買いに行きます。上げると慎重になります。"
-)
-
-run_simulation = st.sidebar.button("収益シミュレーション実行")
-
-# --- メインロジック ---
+# --- メイン処理 ---
 try:
-    # データの読み込み
-    raw_df = load_market_data(period_option)
-    df_display, df_normalized = process_lag_data(raw_df, lag_days)
+    # 1. データ取得
+    with st.spinner('市場データを取得中...'):
+        raw_df = load_market_data(selected_period)
+    
+    # 直近データの表示
+    latest_date = raw_df.index[-1].strftime('%Y-%m-%d')
+    st.info(f"データ取得日: {latest_date} (直近の終値データを使用)")
 
-    # ==========================================
-    # 1. AI予測機能 (Prediction)
-    # ==========================================
-    if run_prediction:
-        with st.spinner('AIが市場データを学習中...'):
-            result = train_and_predict(raw_df)
+    # 2. AI予測
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.subheader("🤖 AIの予測判定")
+        with st.spinner('AIが思考中...'):
+            ai_result = train_and_predict(raw_df)
+        
+        prediction_text = ai_result["prediction"]
+        probability = ai_result["probability"]
+        
+        if prediction_text == "上昇":
+            st.success(f"## {prediction_text} 📈")
+        else:
+            st.error(f"## {prediction_text} 📉")
             
-        st.success("予測完了！")
-        col_pred1, col_pred2, col_pred3 = st.columns(3)
-        
-        with col_pred1:
-            st.metric("AIの予測判定", result["prediction"], 
-                      delta=f"確信度: {result['probability']:.1%}")
-        
-        with col_pred2:
-            st.metric("学習モデルの精度", f"{result['accuracy']:.1%}")
-            
-        with col_pred3:
-            feat = result["latest_input"]
-            st.caption(f"S&P500変化: {feat['S&P500_Chg']:.2%}")
-            st.caption(f"USD/JPY変化: {feat['USDJPY_Chg']:.2%}")
+        st.write(f"確信度: **{probability:.1%}**")
+        st.caption(f"モデル精度(Accuracy): {ai_result['accuracy']:.1%}")
 
-        # AIの判断根拠をグラフ表示
-        st.markdown("##### 🧠 AIの判断根拠 (重要度)")
-        importance_df = pd.DataFrame(
-            list(result["importance"].items()), 
-            columns=["要因", "重要度"]
-        ).set_index("要因")
-        
-        st.bar_chart(importance_df, horizontal=True)
-        st.divider()
+    with col2:
+        st.subheader("🔑 注目している指標")
+        importance = ai_result["importance"]
+        # 重要度順にソート
+        sorted_importance = sorted(importance.items(), key=lambda x: x[1], reverse=True)
+        top_features = dict(sorted_importance[:3])
+        st.json(top_features)
 
-    # ==========================================
-    # 2. バックテスト機能 (Simulation)
-    # ==========================================
+    st.markdown("---")
+
+    # 3. バックテスト結果
     if run_simulation:
         st.subheader("💰 収益シミュレーション結果")
         with st.spinner(f'AI(強気度:{threshold})が過去データでトレード中...'):
-            # test_start_date も受け取る
+            # 【重要】ここで4つの値を受け取るように修正
             res_df, ret_ai, ret_market, test_start_date = run_backtest(raw_df, threshold)
             
         # 結果サマリー
         col_res1, col_res2 = st.columns(2)
         with col_res1:
             st.metric("🤖 AI戦略 (全期間)", f"{ret_ai:+.2f}%", 
-                      delta="注: 左側の網掛け部分は学習データです", delta_color="off")
+                      delta="注: 左側の網掛けは学習データ", delta_color="off")
         with col_res2:
             st.metric("🐻 TOPIXガチホ (全期間)", f"{ret_market:+.2f}%")
 
@@ -131,11 +104,10 @@ try:
             marker=dict(symbol='triangle-down', size=10, color='orange')
         ))
         
-        # --- 【追加】学習期間とテスト期間を分ける線 ---
+        # --- 学習期間とテスト期間の境界線 ---
         fig.add_vline(x=test_start_date, line_width=2, line_dash="dash", line_color="green")
         
-        # 学習期間（カンニング期間）をグレーで塗りつぶす
-        # 注: Plotlyで日付の範囲指定をする際、データの最初の日付が必要です
+        # 学習期間をグレーアウト
         min_date = res_df.index.min()
         fig.add_vrect(
             x0=min_date, x1=test_start_date,
@@ -148,7 +120,8 @@ try:
         fig.add_annotation(
             x=test_start_date, y=1.0,
             text="ここから実力 (Testing) →",
-            showarrow=True, arrowhead=1, ax=-10, ay=-40
+            showarrow=True, arrowhead=1, ax=50, ay=0,
+            xref="x", yref="paper"
         )
 
         st.plotly_chart(fig, use_container_width=True)

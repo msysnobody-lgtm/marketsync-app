@@ -86,27 +86,27 @@ def train_and_predict(raw_df: pd.DataFrame):
 def run_backtest(raw_df: pd.DataFrame, threshold: float = 0.5):
     X, y, data, feature_cols = get_features_and_target(raw_df)
     
-    # 1. 学習用(前半80%) と テスト用(後半20%) に分ける
-    # ※ AIの学習自体は、未来を見ないように「過去データのみ」で行います
+    # データ分割
     split_point = int(len(X) * 0.8)
     X_train = X.iloc[:split_point]
     y_train = y.iloc[:split_point]
     
-    # モデル学習 (前半のデータだけで賢くなる)
+    # テスト開始日を取得（ここが追加点）
+    test_start_date = X.index[split_point]
+
+    # モデル学習
     model = RandomForestClassifier(n_estimators=100, min_samples_split=5, random_state=42)
     model.fit(X_train, y_train)
     
-    # --- 【ここが変更点】 ---
-    # 2. 予測は「全期間 (X全体)」に対して行う
-    # これにより、グラフが「期間設定」と同じ長さになります
+    # 全期間予測
     probs = model.predict_proba(X)[:, 1]
     predictions = (probs >= threshold).astype(int)
     
-    # リターン計算も全期間で行う
+    # リターン計算
     returns_col = data["TOPIX(ETF)"].pct_change().shift(-1)
-    actual_returns = returns_col.loc[X.index] # X_testではなくX全体
+    actual_returns = returns_col.loc[X.index]
     
-    # 資産推移シミュレーション
+    # 資産推移
     strategy_assets = [1.0]
     market_assets = [1.0]
     current_strategy = 1.0
@@ -119,7 +119,6 @@ def run_backtest(raw_df: pd.DataFrame, threshold: float = 0.5):
             current_strategy *= (1 + ret)
         else:
             current_strategy *= 1.0
-            
         current_market *= (1 + ret)
         strategy_assets.append(current_strategy)
         market_assets.append(current_market)
@@ -134,4 +133,5 @@ def run_backtest(raw_df: pd.DataFrame, threshold: float = 0.5):
     final_return_ai = (current_strategy - 1) * 100
     final_return_market = (current_market - 1) * 100
     
-    return results_df, final_return_ai, final_return_market
+    # 戻り値に test_start_date を追加
+    return results_df, final_return_ai, final_return_market, test_start_date

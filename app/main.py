@@ -83,97 +83,75 @@ try:
     # ==========================================
     # 2. バックテスト機能 (Simulation)
     # ==========================================
-    if run_simulation:
+if run_simulation:
         st.subheader("💰 収益シミュレーション結果")
         with st.spinner(f'AI(強気度:{threshold})が過去データでトレード中...'):
-            # スライダーの値(threshold)を渡してシミュレーション
-            res_df, ret_ai, ret_market = run_backtest(raw_df, threshold)
+            # test_start_date も受け取る
+            res_df, ret_ai, ret_market, test_start_date = run_backtest(raw_df, threshold)
             
         # 結果サマリー
         col_res1, col_res2 = st.columns(2)
         with col_res1:
-            st.metric("🤖 AI戦略の成績", f"{ret_ai:+.2f}%", 
-                      delta=f"{ret_ai - ret_market:+.2f}% vs 市場",
-                      delta_color="normal")
+            st.metric("🤖 AI戦略 (全期間)", f"{ret_ai:+.2f}%", 
+                      delta="注: 左側の網掛け部分は学習データです", delta_color="off")
         with col_res2:
-            st.metric("🐻 TOPIXガチホの成績", f"{ret_market:+.2f}%")
+            st.metric("🐻 TOPIXガチホ (全期間)", f"{ret_market:+.2f}%")
 
-        # --- Plotlyによる詳細チャート描画 ---
+        # --- チャート描画 ---
         st.subheader("📊 売買タイミング検証")
         fig = go.Figure()
         
-        # (1) 市場平均（ガチホ）
+        # 1. 市場平均
         fig.add_trace(go.Scatter(
             x=res_df.index, y=res_df["TOPIXガチホ"],
             mode='lines', name='TOPIXガチホ',
             line=dict(color='gray', dash='dot')
         ))
         
-        # (2) AI戦略
+        # 2. AI戦略
         fig.add_trace(go.Scatter(
             x=res_df.index, y=res_df["AI戦略"],
             mode='lines', name='AI戦略',
             line=dict(color='red', width=2)
         ))
         
-        # (3) 売買サインの抽出
-        # Positionが 0→1 になった日（買い）
+        # 3. 売買ポイント（マーカー）
         buy_signals = res_df[res_df["Position"].diff() == 1]
-        # Positionが 1→0 になった日（売り）
         sell_signals = res_df[res_df["Position"].diff() == -1]
         
-        # 買いマーク (▲)
         fig.add_trace(go.Scatter(
             x=buy_signals.index, y=res_df.loc[buy_signals.index]["AI戦略"],
-            mode='markers', name='Buy (参入)',
+            mode='markers', name='Buy',
             marker=dict(symbol='triangle-up', size=10, color='blue')
         ))
 
-        # 売りマーク (▼)
         fig.add_trace(go.Scatter(
             x=sell_signals.index, y=res_df.loc[sell_signals.index]["AI戦略"],
-            mode='markers', name='Sell (撤退)',
+            mode='markers', name='Sell',
             marker=dict(symbol='triangle-down', size=10, color='orange')
         ))
         
-        st.plotly_chart(fig, use_container_width=True)
+        # --- 【追加】学習期間とテスト期間を分ける線 ---
+        fig.add_vline(x=test_start_date, line_width=2, line_dash="dash", line_color="green")
         
-        # 勝敗メッセージ
-        if ret_ai > ret_market:
-            st.success(f"🎉 勝利！ AIはこの設定(強気度{threshold})で市場を出し抜きました。")
-        else:
-            st.warning(f"📉 敗北... AIは慎重すぎたか、判断を誤りました。強気度を調整してみてください。")
-            
-        st.divider()
-
-    # ==========================================
-    # 3. 通常のチャート表示 (Analysis)
-    # ==========================================
-    st.subheader(f"📈 指数比較チャート (ラグ: {lag_days}日)")
-    fig_line = px.line(
-        df_normalized,
-        x=df_normalized.index,
-        y=df_normalized.columns,
-        labels={"value": "変化率 (Start=100)", "variable": "指数"},
-    )
-    st.plotly_chart(fig_line, use_container_width=True)
-
-    col1, col2 = st.columns([1, 1])
-    with col1:
-        st.subheader("🔗 相関分析")
-        correlation = df_display["S&P500"].corr(df_display["TOPIX(ETF)"])
-        st.metric("S&P500 vs TOPIX 相関", f"{correlation:.4f}")
-
-    with col2:
-        st.subheader("📊 散布図")
-        fig_scatter = px.scatter(
-            df_display,
-            x="S&P500",
-            y="TOPIX(ETF)",
-            trendline="ols",
-            title=f"Correlation (Lag: {lag_days} days)",
+        # 学習期間（カンニング期間）をグレーで塗りつぶす
+        # 注: Plotlyで日付の範囲指定をする際、データの最初の日付が必要です
+        min_date = res_df.index.min()
+        fig.add_vrect(
+            x0=min_date, x1=test_start_date,
+            fillcolor="gray", opacity=0.15,
+            layer="below", line_width=0,
+            annotation_text="学習期間 (Training)", annotation_position="top left"
         )
-        st.plotly_chart(fig_scatter, use_container_width=True)
+        
+        # テスト期間の注釈
+        fig.add_annotation(
+            x=test_start_date, y=1.0,
+            text="ここから実力 (Testing) →",
+            showarrow=True, arrowhead=1, ax=-10, ay=-40
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
 
 except Exception as e:
     st.error(f"予期せぬエラーが発生しました: {e}")

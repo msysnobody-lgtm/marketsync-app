@@ -1,0 +1,9 @@
+venv/
+.env
+__pycache__/
+*.pyc
+.vscode/
+
+# 設定ファイルは明示的に許可
+!pyproject.toml
+!requirements.txt

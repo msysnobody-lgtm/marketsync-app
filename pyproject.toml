@@ -1,0 +1,24 @@
+[project]
+name = "market-sync"
+version = "0.1.0"
+description = "S&P500 and TOPIX correlation analysis tool"
+requires-python = ">=3.10"
+
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+
+[tool.ruff.lint]
+select = [
+    "E",  # pycodestyle errors
+    "F",  # Pyflakes
+    "I",  # isort (import sorting)
+    "B",  # flake8-bugbear
+]
+ignore = []
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true # pandasやyfinanceの型定義エラーを無視

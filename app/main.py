@@ -13,6 +13,7 @@ st.markdown("米国市場(S&P500)の動きから、翌日の日本市場(TOPIX)�
 # --- サイドバー設定 ---
 st.sidebar.header("設定")
 selected_period = st.sidebar.selectbox("データ期間", ["1y", "2y", "5y", "10y"], index=2)
+st.sidebar.caption("※5yを選択すると、直近1年間の成績が表示されます(80:20分割)")
 threshold = st.sidebar.slider("AIの強気度判定(しきい値)", 0.4, 0.6, 0.5, 0.01)
 run_simulation = st.sidebar.checkbox("収益シミュレーションを実行", value=True)
 
@@ -26,17 +27,14 @@ try:
     latest_date = raw_df.index[-1].strftime('%Y-%m-%d')
     st.info(f"データ取得日: {latest_date} (直近の終値データを使用)")
 
-    # === 【復活】元データのトレンド比較グラフ ===
+    # 元データのトレンド比較グラフ
     st.subheader("📈 日米株価トレンド比較 (正規化済み)")
-    # データを正規化（最初の日を1.0として比較）
     norm_df = raw_df / raw_df.iloc[0]
-    
     fig_raw = go.Figure()
     fig_raw.add_trace(go.Scatter(x=norm_df.index, y=norm_df["S&P500"], name="🇺🇸 S&P500", line=dict(color='blue')))
     fig_raw.add_trace(go.Scatter(x=norm_df.index, y=norm_df["TOPIX(ETF)"], name="🇯🇵 TOPIX", line=dict(color='orange')))
     fig_raw.update_layout(height=400, margin=dict(l=0, r=0, t=20, b=0))
     st.plotly_chart(fig_raw, use_container_width=True)
-    # ==========================================
 
     # 2. AI予測
     col1, col2 = st.columns(2)
@@ -68,36 +66,27 @@ try:
 
     # 3. バックテスト結果
     if run_simulation:
-        st.subheader("💰 収益シミュレーション結果")
+        st.subheader("💰 実力テスト結果 (直近20%の期間)")
         with st.spinner(f'AI(強気度:{threshold})が過去データでトレード中...'):
-            res_df, ret_ai, ret_market, test_start_date = run_backtest(raw_df, threshold)
+            # 戻り値を3つに変更
+            res_df, ret_ai, ret_market = run_backtest(raw_df, threshold)
             
         # 結果サマリー
         col_res1, col_res2 = st.columns(2)
         with col_res1:
-            st.metric("🤖 AI戦略 (全期間)", f"{ret_ai:+.2f}%", 
-                      delta="注: 左側の網掛けは学習データ", delta_color="off")
+            st.metric("🤖 AI戦略 (実力)", f"{ret_ai:+.2f}%")
         with col_res2:
-            st.metric("🐻 TOPIXガチホ (全期間)", f"{ret_market:+.2f}%")
+            st.metric("🐻 TOPIXガチホ (実力)", f"{ret_market:+.2f}%")
 
         # --- チャート描画 ---
         st.subheader("📊 売買タイミング検証")
         fig = go.Figure()
         
-        # 背景（学習期間）を先に描画（最背面にするため）
-        min_date = res_df.index.min()
-        fig.add_vrect(
-            x0=min_date, x1=test_start_date,
-            fillcolor="gray", opacity=0.15,
-            layer="below", line_width=0,
-            annotation_text="学習期間 (Training)", annotation_position="top left"
-        )
-        
-        # 1. 市場平均 (黒線・太め)
+        # 1. 市場平均 (黒線)
         fig.add_trace(go.Scatter(
             x=res_df.index, y=res_df["TOPIXガチホ"],
             mode='lines', name='TOPIXガチホ',
-            line=dict(color='black', width=2) # 黒くて太い線に変更
+            line=dict(color='black', width=2)
         ))
         
         # 2. AI戦略 (赤線)
@@ -107,7 +96,7 @@ try:
             line=dict(color='red', width=2)
         ))
         
-        # 3. 売買ポイント（マーカー）
+        # 3. 売買ポイント
         buy_signals = res_df[res_df["Position"].diff() == 1]
         sell_signals = res_df[res_df["Position"].diff() == -1]
         
@@ -123,16 +112,6 @@ try:
             marker=dict(symbol='triangle-down', size=10, color='orange')
         ))
         
-        # テスト期間の境界線
-        fig.add_vline(x=test_start_date, line_width=2, line_dash="dash", line_color="green")
-        
-        fig.add_annotation(
-            x=test_start_date, y=1.0,
-            text="ここから実力 (Testing) →",
-            showarrow=True, arrowhead=1, ax=50, ay=0,
-            xref="x", yref="paper"
-        )
-
         st.plotly_chart(fig, use_container_width=True)
 
 except Exception as e:

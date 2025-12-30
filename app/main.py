@@ -14,7 +14,7 @@ st.markdown("米国市場(S&P500)の動きから、翌日の日本市場(TOPIX)�
 st.sidebar.header("設定")
 selected_period = st.sidebar.selectbox("データ期間", ["1y", "2y", "5y", "10y"], index=2)
 st.sidebar.caption("※5yを選択すると、直近1年間の成績が表示されます(80:20分割)")
-threshold = st.sidebar.slider("AIの強気度判定(しきい値)", 0.4, 0.6, 0.5, 0.01)
+threshold = st.sidebar.slider("AIの強気度判定(しきい値)", 0.4, 0.6, 0.40, 0.01)
 run_simulation = st.sidebar.checkbox("収益シミュレーションを実行", value=True)
 
 # --- メイン処理 ---
@@ -59,8 +59,7 @@ try:
         st.subheader("🔑 注目している指標")
         importance = ai_result["importance"]
         sorted_importance = sorted(importance.items(), key=lambda x: x[1], reverse=True)
-        top_features = dict(sorted_importance[:3])
-        st.json(top_features)
+        st.json(dict(sorted_importance))
 
     st.markdown("---")
 

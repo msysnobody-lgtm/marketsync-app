@@ -5,17 +5,32 @@ from sklearn.metrics import accuracy_score
 
 def get_features_and_target(raw_df: pd.DataFrame):
     df = raw_df.copy()
+    
+    # --- 既存の特徴量 ---
     df["Returns"] = df["TOPIX(ETF)"].pct_change()
     df["S&P_Returns"] = df["S&P500"].pct_change()
     df["S&P_Trend"] = df["S&P500"].rolling(5).mean()
     df["Volatility"] = df["TOPIX(ETF)"].rolling(5).std()
     
-    # 目的変数: 翌日のTOPIXが上がるか(1)下がるか(0)
+    # --- ★追加: ドル円の特徴量を作成 ---
+    # データにUSDJPYが含まれている場合のみ計算
+    if "USDJPY" in df.columns:
+        df["USDJPY_Returns"] = df["USDJPY"].pct_change()
+    # ----------------------------------
+
+    # 目的変数
     df["Target"] = (df["TOPIX(ETF)"].shift(-1) > df["TOPIX(ETF)"]).astype(int)
     
     df.dropna(inplace=True)
     
+    # --- 特徴量リストの定義 ---
     feature_cols = ["Returns", "S&P_Returns", "S&P_Trend", "Volatility"]
+    
+    # --- ★追加: リストに加える ---
+    if "USDJPY_Returns" in df.columns:
+        feature_cols.append("USDJPY_Returns")
+    # ---------------------------
+
     X = df[feature_cols]
     y = df["Target"]
     

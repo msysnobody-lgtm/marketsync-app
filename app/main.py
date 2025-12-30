@@ -47,13 +47,53 @@ try:
         prediction_text = ai_result["prediction"]
         probability = ai_result["probability"]
         
+        # --- ★ここが変更点：特大文字で結論を表示 ---
         if prediction_text == "上昇":
-            st.success(f"## {prediction_text} 📈")
+            # 緑色で大きく表示
+            st.markdown(f"<h1 style='text-align: center; color: #28a745;'>予測：{prediction_text} 📈</h1>", unsafe_allow_html=True)
         else:
-            st.error(f"## {prediction_text} 📉")
+            # 赤色で大きく表示
+            st.markdown(f"<h1 style='text-align: center; color: #dc3545;'>予測：{prediction_text} 📉</h1>", unsafe_allow_html=True)
+        # ----------------------------------------
+
+        # --- ゲージチャート ---
+        fig_gauge = go.Figure(go.Indicator(
+            mode = "gauge+number",
+            value = probability * 100,
+            number = {'suffix': "%", 'font': {'size': 40}}, # %付き
             
-        display_prob = probability if probability >= 0.5 else 1 - probability
-        st.write(f"確信度: **{display_prob:.1%}**")
+            domain = {'x': [0, 1], 'y': [0, 1]},
+            
+            # タイトルは短くシンプルにする（結論は上に書いたので）
+            title = {'text': "上昇確率"}, 
+            
+            gauge = {
+                'axis': {'range': [None, 100], 'tickwidth': 1, 'tickcolor': "darkblue"},
+                'bar': {'color': "darkblue"}, 
+                'bgcolor': "white",
+                'borderwidth': 2,
+                'bordercolor': "gray",
+                'steps': [
+                    {'range': [0, 40], 'color': '#ffcccb'},  
+                    {'range': [40, 60], 'color': 'lightgray'},
+                    {'range': [60, 100], 'color': '#90ee90'}  
+                ],
+                'threshold': {
+                    'line': {'color': "red", 'width': 4},
+                    'thickness': 0.75,
+                    'value': threshold * 100 
+                }
+            }
+        ))
+        
+        # マージン設定（タイトルを短くしたので、上側のマージンtは少し減らしても大丈夫です）
+        fig_gauge.update_layout(
+            height=250, 
+            margin=dict(l=30, r=30, t=50, b=30),
+            font=dict(family="Arial", size=14)
+        )
+        st.plotly_chart(fig_gauge, use_container_width=True)
+        
         st.caption(f"モデル精度(Accuracy): {ai_result['accuracy']:.1%}")
 
     with col2:

@@ -52,7 +52,8 @@ try:
         else:
             st.error(f"## {prediction_text} 📉")
             
-        st.write(f"確信度: **{probability:.1%}**")
+        display_prob = probability if probability >= 0.5 else 1 - probability
+        st.write(f"確信度: **{display_prob:.1%}**")
         st.caption(f"モデル精度(Accuracy): {ai_result['accuracy']:.1%}")
 
     with col2:
